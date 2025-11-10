@@ -1,22 +1,60 @@
-from fastapi import FastAPI, HTTPException
+#!/usr/bin/env python3
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import List, Optional, Dict
 import pytz
-from typing import Dict, List, Optional
-import json
-import os
 
-app = FastAPI(title="Time Formatting Microservice")
+app = FastAPI(title="Time Formatting / Conversion Microservice", version="1.1.0")
 
-# Data storage for user timezone preferences
-TIMEZONES_FILE = "timezone_preferences.json"
+# --------------------------------------------------------------------
+# Supported timezones (user-facing abbreviations) and mapping
+# --------------------------------------------------------------------
+SUPPORTED_ABBR: List[str] = ["EST", "CST", "PST", "UTC"]
 
-# Pydantic models
+ABBR_TO_IANA: Dict[str, str] = {
+    "EST": "US/Eastern",
+    "CST": "US/Central",
+    "PST": "US/Pacific",
+    "UTC": "UTC",
+}
+
+# Allow a small set of legacy IANA inputs, but normalize to the abbreviations above.
+IANA_TO_ABBR: Dict[str, str] = {
+    "US/Eastern": "EST",
+    "US/Central": "CST",
+    "US/Pacific": "PST",
+    "UTC": "UTC",
+}
+
+def resolve_abbr(tz: str) -> str:
+    """
+    Accept only our four abbreviations; allow legacy IANA names and normalize them.
+    Raise HTTP 400 for anything else.
+    """
+    if tz in SUPPORTED_ABBR:
+        return tz
+    if tz in IANA_TO_ABBR:
+        return IANA_TO_ABBR[tz]
+    raise HTTPException(status_code=400, detail=f"Unknown or unsupported timezone: {tz}. "
+                                                f"Allowed: {', '.join(SUPPORTED_ABBR)}")
+
+def abbr_to_tzinfo(abbr: str):
+    iana = ABBR_TO_IANA[abbr]
+    try:
+        return pytz.timezone(iana)
+    except pytz.UnknownTimeZoneError:
+        # Should never happen with our fixed set
+        raise HTTPException(status_code=500, detail=f"Server timezone config error: {iana}")
+
+# --------------------------------------------------------------------
+# Models
+# --------------------------------------------------------------------
 class TimeConversionRequest(BaseModel):
-    time_str: str
-    from_timezone: str
-    to_timezone: str
-    date_str: Optional[str] = None  # Optional date for context
+    time_str: str                 # "HH:MM:SS"
+    from_timezone: str            # one of EST/CST/PST/UTC (or legacy mapping)
+    to_timezone: str              # one of EST/CST/PST/UTC (or legacy mapping)
+    date_str: Optional[str] = None  # "YYYY-MM-DD" for DST correctness (recommended)
 
 class TimeConversionResponse(BaseModel):
     original_time: str
@@ -25,159 +63,112 @@ class TimeConversionResponse(BaseModel):
     converted_timezone: str
     is_dst: bool
 
-class UserTimezonePreference(BaseModel):
-    user_id: str
-    preferred_timezone: str
-
 class TimezoneListResponse(BaseModel):
     timezones: List[str]
     total_count: int
 
-# Helper functions for JSON storage
-def load_timezone_preferences() -> Dict[str, str]:
-    """Load timezone preferences from JSON file"""
-    if os.path.exists(TIMEZONES_FILE):
-        with open(TIMEZONES_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+# --------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------
+def parse_time_hms(hms: str) -> datetime:
+    """
+    Parse "HH:MM:SS" into a datetime on an arbitrary date (we'll replace date later).
+    Raise HTTP 400 for invalid format.
+    """
+    try:
+        return datetime.strptime(hms.strip(), "%H:%M:%S")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid time_str format: {e}. Expected 'HH:MM:SS'.")
 
-def save_timezone_preferences(preferences: Dict[str, str]):
-    """Save timezone preferences to JSON file"""
-    with open(TIMEZONES_FILE, 'w') as f:
-        json.dump(preferences, f, indent=2)
+def parse_date(date_s: Optional[str]) -> Optional[datetime]:
+    """
+    Parse "YYYY-MM-DD" into a date (no time component). If None, return None.
+    """
+    if not date_s:
+        return None
+    try:
+        return datetime.strptime(date_s.strip(), "%Y-%m-%d")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date_str format: {e}. Expected 'YYYY-MM-DD'.")
 
-def get_common_timezones() -> List[str]:
-    """Return a list of common timezones"""
-    return [
-        'UTC',
-        'US/Eastern',
-        'US/Central', 
-        'US/Mountain',
-        'US/Pacific',
-        'Europe/London',
-        'Europe/Paris',
-        'Europe/Berlin',
-        'Asia/Tokyo',
-        'Asia/Shanghai',
-        'Australia/Sydney',
-        'Pacific/Auckland'
-    ]
-
-# API endpoints
+# --------------------------------------------------------------------
+# Endpoints
+# --------------------------------------------------------------------
 @app.post("/time/convert", response_model=TimeConversionResponse)
 async def convert_time(conversion_request: TimeConversionRequest):
     """
-    Convert time between timezones
-    
-    BENEFITS: Accurate timezone conversion for global collaboration
-    COSTS: Limited to common timezones; requires valid time format
+    Convert time between EST/CST/PST/UTC in 24-hour format.
+    - time_str: "HH:MM:SS"
+    - from_timezone / to_timezone: EST | CST | PST | UTC (IANA accepted but normalized)
+    - date_str: "YYYY-MM-DD" (recommended, to ensure correct DST at that date)
     """
+    # Normalize tz inputs to our abbreviations; map to tzinfo
+    from_abbr = resolve_abbr(conversion_request.from_timezone)
+    to_abbr   = resolve_abbr(conversion_request.to_timezone)
+    from_tz   = abbr_to_tzinfo(from_abbr)
+    to_tz     = abbr_to_tzinfo(to_abbr)
+
+    # Parse time and (optional) date
+    hms_dt = parse_time_hms(conversion_request.time_str)
+    date_dt = parse_date(conversion_request.date_str)
+
+    # Build the source naive datetime using provided date (or today's date if missing)
+    if date_dt:
+        naive_src = datetime(year=date_dt.year, month=date_dt.month, day=date_dt.day,
+                             hour=hms_dt.hour, minute=hms_dt.minute, second=hms_dt.second)
+    else:
+        today = datetime.now(pytz.utc).astimezone(from_tz)  # today in source tz
+        naive_src = datetime(year=today.year, month=today.month, day=today.day,
+                             hour=hms_dt.hour, minute=hms_dt.minute, second=hms_dt.second)
+
+    # Localize to source tz and convert
     try:
-        # Parse the time (with optional date)
-        if conversion_request.date_str:
-            datetime_str = f"{conversion_request.date_str} {conversion_request.time_str}"
-            time_format = "%Y-%m-%d %H:%M:%S"
-        else:
-            datetime_str = conversion_request.time_str
-            time_format = "%H:%M:%S"
-        
-        # Create naive datetime and localize
-        naive_dt = datetime.strptime(datetime_str, time_format)
-        
-        # Localize to source timezone
-        from_tz = pytz.timezone(conversion_request.from_timezone)
-        localized_dt = from_tz.localize(naive_dt) if conversion_request.date_str else from_tz.localize(
-            datetime.combine(datetime.today(), naive_dt.time())
-        )
-        
-        # Convert to target timezone
-        to_tz = pytz.timezone(conversion_request.to_timezone)
-        converted_dt = localized_dt.astimezone(to_tz)
-        
-        # Check if DST is active
-        is_dst = bool(converted_dt.dst())
-        
-        return TimeConversionResponse(
-            original_time=conversion_request.time_str,
-            original_timezone=conversion_request.from_timezone,
-            converted_time=converted_dt.strftime("%H:%M:%S"),
-            converted_timezone=conversion_request.to_timezone,
-            is_dst=is_dst
-        )
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid time format: {e}")
-    except pytz.exceptions.UnknownTimeZoneError:
-        raise HTTPException(status_code=400, detail="Unknown timezone")
+        localized_src = from_tz.localize(naive_src, is_dst=None)  # let pytz decide; may raise for gaps/folds
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Conversion error: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to localize source time: {e}")
+
+    converted = localized_src.astimezone(to_tz)
+    is_dst = bool(converted.dst())
+
+    return TimeConversionResponse(
+        original_time=conversion_request.time_str,
+        original_timezone=from_abbr,
+        converted_time=converted.strftime("%H:%M:%S"),
+        converted_timezone=to_abbr,
+        is_dst=is_dst
+    )
 
 @app.get("/time/timezones", response_model=TimezoneListResponse)
 async def list_timezones():
     """
-    Get list of available timezones
-    
-    BENEFITS: Browse supported timezones for selection
-    COSTS: Limited predefined set; no custom timezones
+    List ONLY the allowed display timezones.
     """
-    timezones = get_common_timezones()
     return TimezoneListResponse(
-        timezones=timezones,
-        total_count=len(timezones)
+        timezones=SUPPORTED_ABBR,
+        total_count=len(SUPPORTED_ABBR)
     )
 
-@app.post("/time/preferences")
-async def set_timezone_preference(preference: UserTimezonePreference):
-    """
-    Set user's preferred timezone
-    
-    BENEFITS: Save preferred timezone for future conversions
-    COSTS: Requires user authentication; preferences stored locally
-    """
-    preferences = load_timezone_preferences()
-    preferences[preference.user_id] = preference.preferred_timezone
-    save_timezone_preferences(preferences)
-    
-    return {"message": "Timezone preference saved", "user_id": preference.user_id}
-
-@app.get("/time/preferences/{user_id}")
-async def get_timezone_preference(user_id: str):
-    """
-    Get user's preferred timezone
-    """
-    preferences = load_timezone_preferences()
-    preferred_tz = preferences.get(user_id, "UTC")
-    
-    return {
-        "user_id": user_id,
-        "preferred_timezone": preferred_tz,
-        "exists": user_id in preferences
-    }
-
 @app.get("/time/current")
-async def get_current_time(timezone: str = "UTC"):
+async def get_current_time(timezone: str = Query("UTC", description="EST | CST | PST | UTC")):
     """
-    Get current time in specified timezone
+    Get the current time in one of the allowed timezones, in 24-hour format.
     """
-    try:
-        tz = pytz.timezone(timezone)
-        current_time = datetime.now(tz)
-        is_dst = bool(current_time.dst())
-        
-        return {
-            "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "timezone": timezone,
-            "is_dst": is_dst,
-            "timezone_offset": current_time.strftime("%z")
-        }
-    except pytz.exceptions.UnknownTimeZoneError:
-        raise HTTPException(status_code=400, detail="Unknown timezone")
+    abbr = resolve_abbr(timezone)
+    tz = abbr_to_tzinfo(abbr)
+    current_time = datetime.now(tz)
+    is_dst = bool(current_time.dst())
+
+    return {
+        "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": abbr,
+        "is_dst": is_dst,
+        "timezone_offset": current_time.strftime("%z")
+    }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {"status": "healthy", "service": "time_formatting"}
-
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
