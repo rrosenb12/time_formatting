@@ -1,15 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
-from typing import Dict, List, Optional
-import json
-import os
+from typing import List, Optional
 
 app = FastAPI(title="Time Formatting Microservice")
-
-# Data storage for user timezone preferences
-TIMEZONES_FILE = "timezone_preferences.json"
 
 # Pydantic models
 class TimeConversionRequest(BaseModel):
@@ -25,42 +20,17 @@ class TimeConversionResponse(BaseModel):
     converted_timezone: str
     is_dst: bool
 
-class UserTimezonePreference(BaseModel):
-    user_id: str
-    preferred_timezone: str
-
 class TimezoneListResponse(BaseModel):
     timezones: List[str]
     total_count: int
 
-# Helper functions for JSON storage
-def load_timezone_preferences() -> Dict[str, str]:
-    """Load timezone preferences from JSON file"""
-    if os.path.exists(TIMEZONES_FILE):
-        with open(TIMEZONES_FILE, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_timezone_preferences(preferences: Dict[str, str]):
-    """Save timezone preferences to JSON file"""
-    with open(TIMEZONES_FILE, 'w') as f:
-        json.dump(preferences, f, indent=2)
-
 def get_common_timezones() -> List[str]:
-    """Return a list of common timezones"""
+    """Return a list of supported timezones"""
     return [
         'UTC',
         'US/Eastern',
         'US/Central', 
-        'US/Mountain',
-        'US/Pacific',
-        'Europe/London',
-        'Europe/Paris',
-        'Europe/Berlin',
-        'Asia/Tokyo',
-        'Asia/Shanghai',
-        'Australia/Sydney',
-        'Pacific/Auckland'
+        'US/Pacific'
     ]
 
 # API endpoints
@@ -125,34 +95,6 @@ async def list_timezones():
         timezones=timezones,
         total_count=len(timezones)
     )
-
-@app.post("/time/preferences")
-async def set_timezone_preference(preference: UserTimezonePreference):
-    """
-    Set user's preferred timezone
-    
-    BENEFITS: Save preferred timezone for future conversions
-    COSTS: Requires user authentication; preferences stored locally
-    """
-    preferences = load_timezone_preferences()
-    preferences[preference.user_id] = preference.preferred_timezone
-    save_timezone_preferences(preferences)
-    
-    return {"message": "Timezone preference saved", "user_id": preference.user_id}
-
-@app.get("/time/preferences/{user_id}")
-async def get_timezone_preference(user_id: str):
-    """
-    Get user's preferred timezone
-    """
-    preferences = load_timezone_preferences()
-    preferred_tz = preferences.get(user_id, "UTC")
-    
-    return {
-        "user_id": user_id,
-        "preferred_timezone": preferred_tz,
-        "exists": user_id in preferences
-    }
 
 @app.get("/time/current")
 async def get_current_time(timezone: str = "UTC"):
