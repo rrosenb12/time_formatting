@@ -177,6 +177,18 @@ async def format_time(request: TimeFormatRequest):
 # --- Timezone conversion endpoints ---
 @app.post("/time/convert", response_model=TimeConversionResponse)
 async def convert_time(conversion_request: TimeConversionRequest):
+    """
+    Convert a time from one timezone to another, with optional date specification.
+
+    - **time_str**: Time in HH:MM[:SS] format (24-hour input).
+    - **from_timezone**: Source timezone abbreviation (e.g., EST, CST, PST, UTC).
+    - **to_timezone**: Target timezone abbreviation (e.g., EST, CST, PST, UTC).
+    - **date_str** (optional): Date in YYYY-MM-DD format. If omitted, the current date in the source timezone is used.
+
+    Daylight Saving Time (DST) is handled automatically based on the provided date and time. If `date_str` is omitted, DST status is determined using the current date in the source timezone, which may affect the conversion result.
+
+    Returns the converted time string, the original and target timezones, and a flag indicating whether DST is in effect for the converted time.
+    """
     # Normalize tz inputs
     from_abbr = resolve_abbr(conversion_request.from_timezone)
     to_abbr = resolve_abbr(conversion_request.to_timezone)
