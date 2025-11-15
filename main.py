@@ -64,6 +64,11 @@ def format_time_standard(time_obj: time) -> str:
         period = "PM"
     
     return f"{hour_12}:{minute:02d} {period}"
+    
+
+def format_time_military(time_obj: time) -> str:
+    """Format time in 24-hour military format as HHMM, e.g., 14:30 -> '1430'."""
+    return f"{time_obj.hour:02d}{time_obj.minute:02d}"
 
 
 @app.get("/")
@@ -71,9 +76,30 @@ async def root():
     return {
         "message": "Time Formatting API",
         "endpoints": {
-            "/format/standard": "POST - Format time in standard (12-hour) format with AM/PM"
-        }
+            "/format/standard": "POST - Format time in standard (12-hour) format with AM/PM",
+            "/format/military": "POST - Format time in military format (HHMM)",
+        },
     }
+
+
+@app.post("/format/military", response_model=TimeFormatResponse)
+async def format_time_military_endpoint(request: TimeFormatRequest):
+    """
+    Format a time string in 24-hour military format (HHMM).
+    time: HH:MM in 24-hour format
+    """
+    try:
+        time_obj = parse_time(request.time)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    formatted = format_time_military(time_obj)
+
+    return TimeFormatResponse(
+        original_time=request.time,
+        formatted_time=formatted,
+        format="military",
+    )
 
 
 @app.post("/format/standard", response_model=TimeFormatResponse)
