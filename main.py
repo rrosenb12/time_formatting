@@ -62,7 +62,7 @@ def resolve_abbr(tz: str) -> str:
     raise HTTPException(status_code=400, detail=f"Unknown or unsupported timezone: {tz}. Allowed: {', '.join(SUPPORTED_ABBR)}")
 
 
-def abbr_to_tzinfo(abbr: str):
+def abbr_to_tzinfo(abbr: str) -> pytz.tzinfo.BaseTzInfo:
     iana = ABBR_TO_IANA[abbr]
     try:
         return pytz.timezone(iana)
