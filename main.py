@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from typing import List, Optional, Dict
 import pytz
+from pytz.exceptions import AmbiguousTimeError, NonExistentTimeError
 from fastapi import Query
 
 app = FastAPI(title="Time Formatting API", version="1.0.0", docs_url=None, redoc_url=None)
@@ -196,7 +197,7 @@ async def convert_time(conversion_request: TimeConversionRequest):
 
     try:
         localized_src = from_tz.localize(naive_src, is_dst=None)
-    except Exception as e:
+    except (AmbiguousTimeError, NonExistentTimeError) as e:
         raise HTTPException(status_code=400, detail=f"Failed to localize source time: {e}")
 
     converted = localized_src.astimezone(to_tz)
