@@ -213,6 +213,9 @@ async def convert_time(conversion_request: TimeConversionRequest):
 
 @app.get("/time/timezones", response_model=TimezoneListResponse)
 async def list_timezones():
+    """
+    Returns a list of supported timezone abbreviations.
+    """
     return TimezoneListResponse(timezones=SUPPORTED_ABBR, total_count=len(SUPPORTED_ABBR))
 
 
