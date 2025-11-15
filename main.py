@@ -221,6 +221,20 @@ async def list_timezones():
 
 @app.get("/time/current")
 async def get_current_time(timezone: str = Query("UTC", description="EST | CST | PST | UTC")):
+    """
+    Get the current time for a specified timezone.
+
+    Parameters:
+        timezone (str): Timezone abbreviation (EST, CST, PST, UTC). Defaults to "UTC".
+
+    Returns:
+        dict: {
+            "current_time": Current time in "%Y-%m-%d %H:%M:%S" format,
+            "timezone": Timezone abbreviation,
+            "is_dst": Whether daylight saving time is in effect (bool),
+            "timezone_offset": Offset from UTC in "+HHMM" format
+        }
+    """
     abbr = resolve_abbr(timezone)
     tz = abbr_to_tzinfo(abbr)
     current_time = datetime.now(tz)
