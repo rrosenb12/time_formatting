@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import List, Optional, Dict
 import pytz
-from fastapi import HTTPException, Query
+from fastapi import Query
 
 app = FastAPI(title="Time Formatting API", version="1.0.0", docs_url=None, redoc_url=None)
 
