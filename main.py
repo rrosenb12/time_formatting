@@ -2,6 +2,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from datetime import time
 import re
+from datetime import datetime
+from typing import List, Optional, Dict
+import pytz
+from fastapi import Query
 
 app = FastAPI(title="Time Formatting API", version="1.0.0", docs_url=None, redoc_url=None)
 
@@ -14,6 +18,72 @@ class TimeFormatResponse(BaseModel):
     original_time: str
     formatted_time: str
     format: str = "standard"
+
+
+# --- Timezone conversion models and helpers ---
+class TimeConversionRequest(BaseModel):
+    time_str: str                 # "HH:MM:SS"
+    from_timezone: str            # one of EST/CST/PST/UTC (or legacy mapping)
+    to_timezone: str              # one of EST/CST/PST/UTC (or legacy mapping)
+    date_str: Optional[str] = None  # "YYYY-MM-DD" for DST correctness (optional)
+
+
+class TimeConversionResponse(BaseModel):
+    original_time: str
+    original_timezone: str
+    converted_time: str
+    converted_timezone: str
+    is_dst: bool
+
+
+class TimezoneListResponse(BaseModel):
+    timezones: List[str]
+    total_count: int
+
+
+# Supported abbreviations and mappings
+SUPPORTED_ABBR: List[str] = ["EST", "CST", "PST", "UTC"]
+
+ABBR_TO_IANA: Dict[str, str] = {
+    "EST": "US/Eastern",
+    "CST": "US/Central",
+    "PST": "US/Pacific",
+    "UTC": "UTC",
+}
+
+IANA_TO_ABBR: Dict[str, str] = {v: k for k, v in ABBR_TO_IANA.items()}
+
+
+def resolve_abbr(tz: str) -> str:
+    if tz in SUPPORTED_ABBR:
+        return tz
+    if tz in IANA_TO_ABBR:
+        return IANA_TO_ABBR[tz]
+    raise HTTPException(status_code=400, detail=f"Unknown or unsupported timezone: {tz}. Allowed: {', '.join(SUPPORTED_ABBR)}")
+
+
+def abbr_to_tzinfo(abbr: str) -> pytz.tzinfo.BaseTzInfo:
+    iana = ABBR_TO_IANA[abbr]
+    try:
+        return pytz.timezone(iana)
+    except pytz.UnknownTimeZoneError:
+        raise HTTPException(status_code=500, detail=f"Server timezone config error: {iana}")
+
+
+def parse_time_hms(hms: str) -> datetime:
+    try:
+        return datetime.strptime(hms.strip(), "%H:%M:%S")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid time_str format: {e}. Expected 'HH:MM:SS'.")
+
+
+def parse_date(date_s: Optional[str]) -> Optional[datetime]:
+    if not date_s:
+        return None
+    try:
+        return datetime.strptime(date_s.strip(), "%Y-%m-%d")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date_str format: {e}. Expected 'YYYY-MM-DD'.")
 
 
 def parse_time(time_str: str) -> time:
@@ -128,6 +198,92 @@ async def format_time(request: TimeFormatRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+# --- Timezone conversion endpoints ---
+@app.post("/time/convert", response_model=TimeConversionResponse)
+async def convert_time(conversion_request: TimeConversionRequest):
+    """
+    Convert a time from one timezone to another, with optional date specification.
+
+    - **time_str**: Time in HH:MM[:SS] format (24-hour input).
+    - **from_timezone**: Source timezone abbreviation (e.g., EST, CST, PST, UTC).
+    - **to_timezone**: Target timezone abbreviation (e.g., EST, CST, PST, UTC).
+    - **date_str** (optional): Date in YYYY-MM-DD format. If omitted, the current date in the source timezone is used.
+
+    Daylight Saving Time (DST) is handled automatically based on the provided date and time. If `date_str` is omitted, DST status is determined using the current date in the source timezone, which may affect the conversion result.
+
+    Returns the converted time string, the original and target timezones, and a flag indicating whether DST is in effect for the converted time.
+    """
+    # Normalize tz inputs
+    from_abbr = resolve_abbr(conversion_request.from_timezone)
+    to_abbr = resolve_abbr(conversion_request.to_timezone)
+    from_tz = abbr_to_tzinfo(from_abbr)
+    to_tz = abbr_to_tzinfo(to_abbr)
+
+    hms_dt = parse_time_hms(conversion_request.time_str)
+    date_dt = parse_date(conversion_request.date_str)
+
+    if date_dt:
+        naive_src = datetime(year=date_dt.year, month=date_dt.month, day=date_dt.day,
+                             hour=hms_dt.hour, minute=hms_dt.minute, second=hms_dt.second)
+    else:
+        today = datetime.now(pytz.utc).astimezone(from_tz)
+        naive_src = datetime(year=today.year, month=today.month, day=today.day,
+                             hour=hms_dt.hour, minute=hms_dt.minute, second=hms_dt.second)
+
+    try:
+        localized_src = from_tz.localize(naive_src, is_dst=None)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to localize source time: {e}")
+
+    converted = localized_src.astimezone(to_tz)
+    is_dst = bool(converted.dst())
+
+    return TimeConversionResponse(
+        original_time=conversion_request.time_str,
+        original_timezone=from_abbr,
+        converted_time=converted.strftime("%H:%M:%S"),
+        converted_timezone=to_abbr,
+        is_dst=is_dst
+    )
+
+
+@app.get("/time/timezones", response_model=TimezoneListResponse)
+async def list_timezones():
+    """
+    Returns a list of supported timezone abbreviations.
+    """
+    return TimezoneListResponse(timezones=SUPPORTED_ABBR, total_count=len(SUPPORTED_ABBR))
+
+
+@app.get("/time/current")
+async def get_current_time(timezone: str = Query("UTC", description="EST | CST | PST | UTC")):
+    """
+    Get the current time for a specified timezone.
+
+    Parameters:
+        timezone (str): Timezone abbreviation (EST, CST, PST, UTC). Defaults to "UTC".
+
+    Returns:
+        dict: {
+            "current_time": Current time in "%Y-%m-%d %H:%M:%S" format,
+            "timezone": Timezone abbreviation,
+            "is_dst": Whether daylight saving time is in effect (bool),
+            "timezone_offset": Offset from UTC in "+HHMM" format
+        }
+    """
+    abbr = resolve_abbr(timezone)
+    tz = abbr_to_tzinfo(abbr)
+    current_time = datetime.now(tz)
+    is_dst = bool(current_time.dst())
+
+    return {
+        "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": abbr,
+        "is_dst": is_dst,
+        "timezone_offset": current_time.strftime("%z")
+    }
 
 
 if __name__ == "__main__":
