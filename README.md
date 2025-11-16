@@ -63,12 +63,5 @@ curl -X POST "http://localhost:8001/format/standard" \
   -d '{"time": "14:30"}'
 ```
 
-## Functional Requirements
+## UML Diagram
 
-✅ **Standard Time Format**: The API formats time in standard (12-hour) format with AM/PM notation.
-
-✅ **Valid Time Input**: The API accepts valid time inputs in HH:MM format (24-hour input).
-
-## Quality Attributes
-
-✅ **Usability**: Users can easily view times in their selected format through a simple REST API interface.
