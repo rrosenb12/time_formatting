@@ -65,5 +65,5 @@ curl -X POST "http://localhost:8001/format/standard" \
 
 ## UML Diagram
 
-[Time Formatting Sequence Diagram.pdf](https://github.com/user-attachments/files/23565124/Time.Formatting.Sequence.Diagram.pdf)
+<img width="675" height="1575" alt="Time Formatting Sequence Diagram" src="https://github.com/user-attachments/assets/abcc202e-1655-4cac-9f4f-80b11c7d89b9" />
 
