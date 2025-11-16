@@ -4,9 +4,6 @@ A FastAPI microservice that formats times and provides a simple HTTP API. This R
 
 ## Service Endpoints (Contract)
 
-- **Health check**: `GET /health`
-  - Response: `200 OK`, body: `{ "status": "ok" }`
-
 - **Format time (standard / 12-hour)**: `POST /format/standard`
   - Request (Content-Type: application/json):
     ```json
