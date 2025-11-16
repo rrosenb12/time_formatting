@@ -19,7 +19,7 @@ A FastAPI microservice that formats times and provides a simple HTTP API. This R
     ```
   - Error responses: `400 Bad Request` for invalid time formats, with JSON describing the error.
 
-- **List timezones (optional helper)**: `GET /timezones`
+- **List timezones (optional helper)**: `GET /time/timezones`
   - Response: JSON list of supported timezone strings (if implemented).
 
 IMPORTANT: This is the communication contract. Do not change request/response shapes without coordinating with your teammates.
