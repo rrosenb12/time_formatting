@@ -22,19 +22,7 @@ A FastAPI microservice that formats times and provides a simple HTTP API. This R
 - **List timezones (optional helper)**: `GET /time/timezones`
   - Response: JSON list of supported timezone strings (if implemented).
 
-IMPORTANT: This is the communication contract. Do not change request/response shapes without coordinating with your teammates.
-
-## Requesting Data (examples)
-
-These examples show how a client program should *request* time-formatting from the service.
-
-- Curl (PowerShell-friendly):
-
-```powershell
-curl -X POST "http://localhost:8001/format/standard" `
-  -H "Content-Type: application/json" `
-  -d '{"time": "14:30"}'
-```
+## Requesting Data (example)
 
 - Python (`requests`) — sending a request:
 
@@ -83,4 +71,5 @@ else:
     raise SystemExit("Unexpected response format")
 ```
 
-- Curl output note: `curl` prints the response body to stdout; you can pipe it to a file or a JSON parser for further processing.
+## UML Diagram
+<img width="1580" height="3660" alt="Sequence diagram" src="https://github.com/user-attachments/assets/edb0cac9-c9da-4850-9b05-fe67e33eec89" />
