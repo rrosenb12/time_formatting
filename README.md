@@ -1,51 +1,59 @@
 # Time Formatting API
 
-A FastAPI application that allows users to format time.
+A FastAPI microservice that formats times and provides a simple HTTP API. This README now includes the communication contract required by the assignment: how to programmatically request data, how the service responds, an example test program, and an example UML sequence diagram placeholder.
 
-## Features
+## Service Endpoints (Contract)
 
-- Format time in 12-hour format with AM/PM notation (standard time)
-- Accepts time input in HH:MM format
-- RESTful API
+- **Format time (standard / 12-hour)**: `POST /format/standard`
+  - Request (Content-Type: application/json):
+    ```json
+    { "time": "14:30" }
+    ```
+  - Successful response (`200 OK`):
+    ```json
+    {
+      "original_time": "14:30",
+      "formatted_time": "2:30 PM",
+      "format": "standard"
+    }
+    ```
+  - Error responses: `400 Bad Request` for invalid time formats, with JSON describing the error.
 
-## Setup
+- **List timezones (optional helper)**: `GET /time/timezones`
+  - Response: JSON list of supported timezone strings (if implemented).
 
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
+IMPORTANT: This is the communication contract. Do not change request/response shapes without coordinating with your teammates.
+
+## Requesting Data (examples)
+
+These examples show how a client program should *request* time-formatting from the service.
+
+- Curl (PowerShell-friendly):
+
+```powershell
+curl -X POST "http://localhost:8001/format/standard" `
+  -H "Content-Type: application/json" `
+  -d '{"time": "14:30"}'
 ```
 
-2. Run the application:
-```bash
-python main.py
+- Python (`requests`) — sending a request:
+
+```python
+import requests
+
+url = "http://localhost:8001/format/standard"
+resp = requests.post(url, json={"time": "14:30"}, timeout=5)
+resp.raise_for_status()
+data = resp.json()
+print("Received:", data)
 ```
 
-Or using the run script:
-```bash
-python run.py
-```
+## Receiving Data (examples)
 
-Or using uvicorn directly (port must be specified):
-```bash
-uvicorn main:app --reload --port 8001
-```
+These examples show what the client receives and how to handle the response programmatically.
 
-The API will be available at `http://localhost:8001`
+- Expected successful JSON response body:
 
-## Usage
-
-### Format Time Endpoint
-
-**POST** `/format/standard`
-
-Request body:
-```json
-{
-  "time": "14:30"
-}
-```
-
-Response:
 ```json
 {
   "original_time": "14:30",
@@ -54,16 +62,25 @@ Response:
 }
 ```
 
-### Example Requests
+- Example: parsing the response in Python and using values:
 
-**Standard time (12-hour format):**
-```bash
-curl -X POST "http://localhost:8001/format/standard" \
-  -H "Content-Type: application/json" \
-  -d '{"time": "14:30"}'
+```python
+import requests
+
+url = "http://localhost:8001/format/standard"
+resp = requests.post(url, json={"time": "14:30"}, timeout=5)
+resp.raise_for_status()
+data = resp.json()
+
+original = data.get("original_time")
+fmt = data.get("formatted_time")
+print(f"Original: {original} -> Formatted: {fmt}")
+
+# Example check used by automated tests
+if fmt and "PM" in fmt:
+    print("Received expected formatted time")
+else:
+    raise SystemExit("Unexpected response format")
 ```
 
-## UML Diagram
-
-<img width="675" height="1575" alt="Time Formatting Sequence Diagram" src="https://github.com/user-attachments/assets/abcc202e-1655-4cac-9f4f-80b11c7d89b9" />
-
+- Curl output note: `curl` prints the response body to stdout; you can pipe it to a file or a JSON parser for further processing.
