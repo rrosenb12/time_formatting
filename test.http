@@ -1,0 +1,55 @@
+# Test endpoints for Time Formatting API
+
+@baseUrl = http://localhost:8001
+
+###
+
+GET {{baseUrl}}/
+
+###
+
+POST {{baseUrl}}/format/standard
+Content-Type: application/json
+
+{
+  "time": "14:30"
+}
+
+###
+
+POST {{baseUrl}}/format/military
+Content-Type: application/json
+
+{
+  "time": "14:30"
+}
+
+###
+
+POST {{baseUrl}}/format/to_military
+Content-Type: application/json
+
+{
+  "time_12": "2:30 PM"
+}
+
+###
+
+POST {{baseUrl}}/time/convert
+Content-Type: application/json
+
+{
+  "time_str": "14:30:00",
+  "from_timezone": "UTC",
+  "to_timezone": "EST"
+}
+
+###
+
+GET {{baseUrl}}/time/timezones
+
+###
+
+GET {{baseUrl}}/time/current?timezone=UTC
+
+###
