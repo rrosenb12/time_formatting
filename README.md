@@ -75,14 +75,6 @@ IMPORTANT: This is the communication contract. Do not change request/response sh
 
 **Example Requests Using Different Tools**:
 
-- Curl (PowerShell-friendly):
-
-```powershell
-curl -X POST "http://localhost:8001/format/standard" `
-  -H "Content-Type: application/json" `
-  -d '{"time": "14:30"}'
-```
-
 - Python (`requests`) — sending a request:
 
 ```python
@@ -155,4 +147,5 @@ else:
     raise SystemExit("Unexpected response format")
 ```
 
-- Curl output note: `curl` prints the response body to stdout; you can pipe it to a file or a JSON parser for further processing.
+## UML Diagram
+<img width="1580" height="3660" alt="Sequence diagram" src="https://github.com/user-attachments/assets/edb0cac9-c9da-4850-9b05-fe67e33eec89" />
