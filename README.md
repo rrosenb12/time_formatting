@@ -61,7 +61,7 @@ Successful response (`200 OK`):
 }
 ```
 
-## How to Request (before examples)
+## How to Request
 
 1) Ensure the service is running on `http://localhost:8001`.
 2) Send an HTTP `POST` to `/format/standard` with JSON body containing a single `time` field in `HH:MM` format.
