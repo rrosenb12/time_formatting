@@ -1,8 +1,6 @@
 # Time Formatting API
 
-A FastAPI microservice that formats times and provides a simple HTTP API. This README now includes the communication contract required by the assignment: how to programmatically request data, how the service responds, an example test program, and an example UML sequence diagram placeholder.
-
-## Getting Started
+A FastAPI application that converts 24-hour times (HH:MM) into 12-hour format with AM/PM notation.
 
 ### Prerequisites
 - Python 3.7 or higher
@@ -15,109 +13,44 @@ The service runs on **port 8001** by default. Start it using:
 uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
-Or using the provided run script:
+2. Start the application (choose one):
 ```bash
+# Python entry point
+python main.py
+
+# Or using the run script (if present)
 python run.py
+
+# Or start via uvicorn explicitly
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### Connecting to the Service
-All requests are made to `http://localhost:8001` (or the appropriate host/port where the service is running).
+The API will be available at `http://localhost:8001`.
 
-The service uses RESTful HTTP methods:
-- **POST** for formatting time requests
-- **GET** for retrieving available timezones
+## Connecting to the Service
 
-All POST requests must include `Content-Type: application/json` header and send data as JSON in the request body.
+- Base URL: `http://localhost:8001`
+- All requests and responses use JSON.
+- For POST requests, include header `Content-Type: application/json`.
 
-## Service Endpoints (Contract)
+## Endpoints (Communication Contract)
 
-- **Format time (standard / 12-hour)**: `POST /format/standard`
-  - Request (Content-Type: application/json):
-    ```json
-    { "time": "14:30" }
-    ```
-  - Successful response (`200 OK`):
-    ```json
-    {
-      "original_time": "14:30",
-      "formatted_time": "2:30 PM",
-      "format": "standard"
-    }
-    ```
-  - Error responses: `400 Bad Request` for invalid time formats, with JSON describing the error.
+### Format Time (standard 12-hour)
 
-- **List timezones (optional helper)**: `GET /time/timezones`
-  - Response: JSON list of supported timezone strings (if implemented).
+- Path: `/format/standard`
+- Method: `POST`
+- Content-Type: `application/json`
 
-IMPORTANT: This is the communication contract. Do not change request/response shapes without coordinating with your teammates.
+Required request body fields:
+- `time` (string, required): A time in 24-hour `HH:MM` format.
 
-## How to programmatically REQUEST data (detailed guide)
+Optional fields: none
 
-### 1. Format Time to Standard 12-Hour Format (`POST /format/standard`)
+Input requirements and validation:
+- `HH` must be `00`–`23`; `MM` must be `00`–`59`.
+- Invalid or misformatted times return `400 Bad Request` with an error message.
 
-**Purpose**: Convert 24-hour time format (e.g., "14:30") to 12-hour format with AM/PM (e.g., "2:30 PM").
-
-**Connection Details**:
-- URL: `http://localhost:8001/format/standard`
-- Method: POST
-- Content-Type: application/json
-
-**Required Parameters**:
-- `time` (string): Time in 24-hour format (HH:MM). Examples: "14:30", "09:15", "23:45"
-
-**Optional Parameters**: None
-
-**Time Format Requirements**:
-- Must be in HH:MM format
-- Hours: 00-23
-- Minutes: 00-59
-- Invalid formats will return a 400 Bad Request error
-
-**Example Requests Using Different Tools**:
-
-- Python (`requests`) — sending a request:
-
-```python
-import requests
-
-url = "http://localhost:8001/format/standard"
-resp = requests.post(url, json={"time": "14:30"}, timeout=5)
-resp.raise_for_status()
-data = resp.json()
-print("Received:", data)
-```
-
-### 2. List Available Timezones (`GET /time/timezones`)
-
-**Purpose**: Retrieve a list of all supported timezone strings (if implemented).
-
-**Connection Details**:
-- URL: `http://localhost:8001/time/timezones`
-- Method: GET
-- Content-Type: Not required for GET requests
-
-**Required Parameters**: None
-
-**Optional Parameters**: None
-
-**Example Request**:
-
-```python
-import requests
-
-url = "http://localhost:8001/time/timezones"
-resp = requests.get(url, timeout=5)
-resp.raise_for_status()
-timezones = resp.json()
-print("Available timezones:", timezones)
-```
-
-## Receiving Data (examples)
-
-These examples show what the client receives and how to handle the response programmatically.
-
-- Expected successful JSON response body:
-
+Successful response (`200 OK`):
 ```json
 {
   "original_time": "14:30",
@@ -126,6 +59,34 @@ These examples show what the client receives and how to handle the response prog
 }
 ```
 
+## How to Request
+
+1) Ensure the service is running on `http://localhost:8001`.
+2) Send an HTTP `POST` to `/format/standard` with JSON body containing a single `time` field in `HH:MM` format.
+3) Set header `Content-Type: application/json`.
+4) Expect a JSON response with the original and formatted time, or a `400` error for invalid input.
+
+## Example Requests
+
+Using Python (`requests`):
+```python
+import requests
+
+url = "http://localhost:8001/format/standard"
+payload = {"time": "14:30"}
+resp = requests.post(url, json=payload, timeout=5)
+if resp.status_code == 200:
+    data = resp.json()
+    print("Original:", data.get("original_time"))
+    print("Formatted:", data.get("formatted_time"))
+else:
+    print("Error:", resp.status_code, resp.text)
+```
+
+## Receiving and Handling Responses
+
+- Success: status `200` with JSON body containing `original_time`, `formatted_time`, and `format`.
+- Client error: status `400` for invalid `time` format. The response includes an error message explaining the issue.
 - Example: parsing the response in Python and using values:
 
 ```python
