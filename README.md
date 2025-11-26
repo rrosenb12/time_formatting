@@ -2,17 +2,15 @@
 
 A FastAPI application that converts 24-hour times (HH:MM) into 12-hour format with AM/PM notation.
 
-## Features
+### Prerequisites
+- Python 3.7 or higher
+- The microservice must be running on your local machine or network
+- Python library: `requests` (install with `pip install requests`)
 
-- Formats time in 12-hour format with AM/PM ("standard" time)
-- Accepts 24-hour input times in `HH:MM` format (e.g., `00:05`, `14:30`, `23:59`)
-- Simple RESTful HTTP API
-
-## Setup
-
-1. Install dependencies:
+### Starting the Service
+The service runs on **port 8001** by default. Start it using:
 ```bash
-pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
 2. Start the application (choose one):
@@ -89,3 +87,26 @@ else:
 
 - Success: status `200` with JSON body containing `original_time`, `formatted_time`, and `format`.
 - Client error: status `400` for invalid `time` format. The response includes an error message explaining the issue.
+- Example: parsing the response in Python and using values:
+
+```python
+import requests
+
+url = "http://localhost:8001/format/standard"
+resp = requests.post(url, json={"time": "14:30"}, timeout=5)
+resp.raise_for_status()
+data = resp.json()
+
+original = data.get("original_time")
+fmt = data.get("formatted_time")
+print(f"Original: {original} -> Formatted: {fmt}")
+
+# Example check used by automated tests
+if fmt and "PM" in fmt:
+    print("Received expected formatted time")
+else:
+    raise SystemExit("Unexpected response format")
+```
+
+## UML Diagram
+<img width="1580" height="3660" alt="Sequence diagram" src="https://github.com/user-attachments/assets/edb0cac9-c9da-4850-9b05-fe67e33eec89" />

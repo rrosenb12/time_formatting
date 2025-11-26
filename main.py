@@ -20,6 +20,10 @@ class TimeFormatResponse(BaseModel):
     format: str = "standard"
 
 
+class Time12ToMilitaryRequest(BaseModel):
+    time_12: str = Field(..., description="Time input in 12-hour format (e.g., '1:15 PM')")
+
+
 # --- Timezone conversion models and helpers ---
 class TimeConversionRequest(BaseModel):
     time_str: str                 # "HH:MM:SS"
@@ -59,7 +63,8 @@ def resolve_abbr(tz: str) -> str:
         return tz
     if tz in IANA_TO_ABBR:
         return IANA_TO_ABBR[tz]
-    raise HTTPException(status_code=400, detail=f"Unknown or unsupported timezone: {tz}. Allowed: {', '.join(SUPPORTED_ABBR)}")
+    raise HTTPException(
+        status_code=400, detail=f"Unknown or unsupported timezone: {tz}. Allowed: {', '.join(SUPPORTED_ABBR)}")
 
 
 def abbr_to_tzinfo(abbr: str) -> pytz.tzinfo.BaseTzInfo:
@@ -112,6 +117,19 @@ def parse_time(time_str: str) -> time:
     return time(hour, minute)
 
 
+def parse_time_12(time_12: str) -> time:
+    """
+    Parse time string in 12-hour format and return a time object.
+    """
+    time_12 = time_12.strip()
+    try:
+        dt = datetime.strptime(time_12, "%I:%M %p")
+        return dt.time()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid 12-hour time format: {time_12}. Expected format like '1:15 PM'.")
+
+
 def format_time_standard(time_obj: time) -> str:
     """
     Format time in 12-hour format with AM/PM notation.
@@ -148,6 +166,7 @@ async def root():
         "endpoints": {
             "/format/standard": "POST - Format time in standard (12-hour) format with AM/PM",
             "/format/military": "POST - Format time in military format (HHMM)",
+            "/format/to_military": "POST - Format 12-hour time to 24-hour military format (HH:MM)",
         },
     }
 
@@ -170,6 +189,26 @@ async def format_time_military_endpoint(request: TimeFormatRequest):
         formatted_time=formatted,
         format="military",
     )
+
+
+@app.post("/format/to_military")
+async def format_to_military(request: Time12ToMilitaryRequest):
+    """
+    Format a 12-hour time string to 24-hour military format (HH:MM).
+    time_12: 12-hour format like "1:15 PM"
+    """
+    try:
+        time_obj = parse_time_12(request.time_12)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    formatted = f"{time_obj.hour:02d}:{time_obj.minute:02d}"
+
+    return {
+        "original_time": request.time_12,
+        "military_time": formatted,
+        "format": "military",
+    }
 
 
 @app.post("/format/standard", response_model=TimeFormatResponse)
@@ -209,11 +248,15 @@ async def convert_time(conversion_request: TimeConversionRequest):
     - **time_str**: Time in HH:MM[:SS] format (24-hour input).
     - **from_timezone**: Source timezone abbreviation (e.g., EST, CST, PST, UTC).
     - **to_timezone**: Target timezone abbreviation (e.g., EST, CST, PST, UTC).
-    - **date_str** (optional): Date in YYYY-MM-DD format. If omitted, the current date in the source timezone is used.
+    - **date_str** (optional): Date in YYYY-MM-DD format. If omitted, the current 
+    date in the source timezone is used.
 
-    Daylight Saving Time (DST) is handled automatically based on the provided date and time. If `date_str` is omitted, DST status is determined using the current date in the source timezone, which may affect the conversion result.
+    Daylight Saving Time (DST) is handled automatically based on the provided date 
+    and time. If `date_str` is omitted, DST status is determined using the current 
+    date in the source timezone, which may affect the conversion result.
 
-    Returns the converted time string, the original and target timezones, and a flag indicating whether DST is in effect for the converted time.
+    Returns the converted time string, the original and target timezones, and a 
+    flag indicating whether DST is in effect for the converted time.
     """
     # Normalize tz inputs
     from_abbr = resolve_abbr(conversion_request.from_timezone)
